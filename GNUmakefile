@@ -21,7 +21,12 @@ CSTYLE_FLAGS		+= -cCp
 
 # Configuration for developers
 PMX_SOURCES		 = pmx_subr.c
-PMX_CSTYLE_SOURCES	 = $(wildcard src/*.c src/*.h include/pmx/*.h)
+PMXEMIT_SOURCES		 = pmxemit.c
+PMX_CSTYLE_SOURCES	 = $(wildcard \
+				include/pmx/*.h \
+				src/libpmx/*.c \
+				src/libpmx/*.h \
+				src/pmxemit/*.c)
 CPPFLAGS		+= -Iinclude
 CFLAGS			+= -Werror -Wall -Wextra -fPIC -fno-omit-frame-pointer
 
@@ -35,6 +40,7 @@ endif
 MKDIRP			 = mkdir -p $@
 COMPILE.c		 = $(CC) -o $@ -c $(CFLAGS) $(CPPFLAGS) $^
 MAKESO	 		 = $(CC) -o $@ -shared $(SOFLAGS) $(LDFLAGS) $^
+MAKEEXEC		 = $(CC) -o $@ $(LDFLAGS) $^
 
 PMX_OBJECTS_ia32	 = $(PMX_SOURCES:%.c=$(PMX_BUILD)/ia32/%.o)
 PMX_TARGETS_ia32	 = $(PMX_BUILD)/ia32/libpmx.so
@@ -46,7 +52,14 @@ PMX_TARGETS_amd64	 = $(PMX_BUILD)/amd64/libpmx.so
 $(PMX_TARGETS_amd64):	 CFLAGS += -m64
 $(PMX_TARGETS_amd64):	 SOFLAGS += -m64
 
-PMX_ALLTARGETS   	 = $(PMX_TARGETS_ia32) $(PMX_TARGETS_amd64)
+PMX_PMXEMIT		 = $(PMX_BUILD)/ia32/pmxemit
+PMX_PMXEMIT_OBJECTS	 = $(PMXEMIT_SOURCES:%.c=$(PMX_BUILD)/ia32/%.o)
+$(PMX_PMXEMIT_OBJECTS):	 CFLAGS += -m32
+$(PMX_PMXEMIT):		 LDFLAGS += -m32 -L$(PMX_BUILD)/ia32 -lpmx
+
+PMX_ALLTARGETS   	 = $(PMX_TARGETS_ia32) \
+			    $(PMX_TARGETS_amd64) \
+			    $(PMX_PMXEMIT)
 
 # Phony targets for convenience
 .PHONY: all
@@ -76,15 +89,22 @@ $(PMX_BUILD)/ia32:
 $(PMX_BUILD)/ia32/libpmx.so: $(PMX_OBJECTS_ia32)
 	$(MAKESO)
 
-$(PMX_BUILD)/ia32/%.o: src/%.c | $(PMX_BUILD)/ia32
+$(PMX_BUILD)/ia32/%.o: src/libpmx/%.c | $(PMX_BUILD)/ia32
+	$(COMPILE.c)
+
+$(PMX_BUILD)/ia32/%.o: src/pmxemit/%.c | $(PMX_BUILD)/ia32
 	$(COMPILE.c)
 
 
 $(PMX_BUILD)/amd64/libpmx.so: $(PMX_OBJECTS_amd64)
 	$(MAKESO)
 
-$(PMX_BUILD)/amd64/%.o: src/%.c | $(PMX_BUILD)/amd64
+$(PMX_BUILD)/amd64/%.o: src/libpmx/%.c | $(PMX_BUILD)/amd64
 	$(COMPILE.c)
 
 $(PMX_BUILD)/amd64:
 	$(MKDIRP)
+
+
+$(PMX_PMXEMIT): $(PMX_PMXEMIT_OBJECTS) | $(PMX_BUILD)/ia32
+	$(MAKEEXEC)

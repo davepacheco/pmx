@@ -20,6 +20,5 @@ The expectation is that this will eventually have at least two backends:
 * a sqlite-based backend that records the data in a sqlite database
 
 TODO:
-- build a small driver program
 - implement the actual export functions
 - build a small test suite

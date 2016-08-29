@@ -150,3 +150,14 @@ pmx_vpanic(PMX_UNUSED pmx_stream_t *pmxp, const char *fmt, va_list args)
 	(void) write(STDERR_FILENO, pmx_panicstr, nbytes);
 	abort();
 }
+
+
+/*
+ * Emitters.
+ */
+void
+pmx_emit_metadata(pmx_stream_t *pmxp, const char *key, const char *value)
+{
+	/* XXX for testing only */
+	(void) fprintf(pmxp->pxs_outstream, "metadata: %s=%s\n", key, value);
+}

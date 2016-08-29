@@ -16,7 +16,9 @@
 #ifndef	_PMX_H
 #define	_PMX_H
 
+#include <stdint.h>
 #include <stdio.h>
+#include <time.h>
 
 typedef uintptr_t pmx_value_t;
 typedef struct pmx_stream pmx_stream_t;
