@@ -61,7 +61,6 @@ pmx_free(pmx_stream_t *pmxp)
 pmx_error_t
 pmx_errno(pmx_stream_t *pmxp)
 {
-	assert(pmxp->pxs_error >= 0);
 	return (pmxp->pxs_error);
 }
 
@@ -89,7 +88,6 @@ pmx_errmsg(pmx_stream_t *pmxp)
 void
 pmx_set_errno(pmx_stream_t *pmxp, pmx_error_t pmxerr)
 {
-	assert(pmxerr >= 0);
 	pmxp->pxs_error = pmxerr;
 	pmxp->pxs_errmsg[0] = '\0';
 }
@@ -108,7 +106,6 @@ void
 pmx_verror(pmx_stream_t *pmxp, pmx_error_t pmxerr, const char *fmt,
     va_list args)
 {
-	assert(pmxerr >= 0);
 	pmxp->pxs_error = pmxerr;
 	(void) vsnprintf(pmxp->pxs_errmsg, sizeof (pmxp->pxs_errmsg), fmt,
 	    args);
