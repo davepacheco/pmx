@@ -26,13 +26,19 @@ typedef enum {
 	PMXS_INIT,	/* initial state */
 	PMXS_TOP,	/* ready to emit arbitrary nodes and edges */
 
-	PMXS_FUNCTION,	/* currently emitting a "function" node */
-	PMXS_CLOSURE,	/* currently emitting a "closure" node */
-	PMXS_OBJECT,	/* currently emitting an "object" node */
-	PMXS_ARRAY,	/* currently emitting an "array" node */
+	PMXS_NODE,	/* emitting a node */
+	PMXS_EDGE,	/* emitting an edge */
 
 	PMXS_FINI,	/* no more output accepted */
 } pmx_state_t;
+
+/*
+ * These values are defined in the specification.
+ * XXX Not yet, but they should be.
+ */
+typedef enum {
+	PMXN_ODDBALL = 1
+} pmx_nodetype_t;
 
 /*
  * A pmx_stream_t represents an export operation.  The stream progresses through
@@ -51,6 +57,16 @@ struct pmx_stream {
 	pmx_error_t	pxs_error;
 	char		pxs_errmsg[PMX_ERRMSGLEN];
 
+	/* booleans and counters used to help validate output */
+	pmx_boolean_t	pxs_emitted_hole;
+	pmx_boolean_t	pxs_emitted_null;
+	pmx_boolean_t	pxs_emitted_undefined;
+	pmx_boolean_t	pxs_emitted_true;
+	pmx_boolean_t	pxs_emitted_false;
+	unsigned long	pxs_nwarnings;
+	unsigned long	pxs_nfields;
+	/* XXX need way for callers to check for warnings */
+
 	/* counters (primarily for debugging) */
 	unsigned long	pxs_nmetadata;
 	unsigned long	pxs_nnodes;
@@ -61,6 +77,7 @@ struct pmx_stream {
  * Macros used to apply function attributes.
  */
 #define	PMX_NORETURN	__attribute__((__noreturn__))
+#define	PMX_PRINTFLIKE1 __attribute__((__format__(__printf__, 1, 2)))
 #define	PMX_PRINTFLIKE2 __attribute__((__format__(__printf__, 2, 3)))
 #define	PMX_PRINTFLIKE3 __attribute__((__format__(__printf__, 3, 4)))
 #define	PMX_UNUSED	__attribute__((__unused__))
@@ -74,9 +91,13 @@ PMX_PRINTFLIKE2
     extern void pmx_warn(pmx_stream_t *, const char *, ...);
 extern void pmx_vwarn(pmx_stream_t *, const char *, va_list);
 
-PMX_NORETURN PMX_PRINTFLIKE2
-    extern void pmx_panic(pmx_stream_t *, const char *, ...);
-PMX_NORETURN
-    extern void pmx_vpanic(pmx_stream_t *, const char *, va_list);
+extern int pmx_assfail(const char *, const char *, unsigned int);
+PMX_NORETURN PMX_PRINTFLIKE1 extern void pmx_panic(const char *, ...);
+PMX_NORETURN extern void pmx_vpanic(const char *, va_list);
+
+pmx_boolean_t pmx_cstr_printable(const char *);
+
+#define	VERIFY(X) \
+    ((void)((X) || pmx_assfail(#X, __FILE__, __LINE__)))
 
 #endif /* not defined _PMX_IMPL_H */

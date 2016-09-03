@@ -44,21 +44,25 @@ pmx_error_t pmx_errno(pmx_stream_t *);
 const char *pmx_errmsg(pmx_stream_t *);
 
 void pmx_emit_metadata(pmx_stream_t *, const char *, const char *);
-void pmx_emit_node_boolean(pmx_stream_t *, pmx_value_t, pmx_boolean_t);
+void pmx_emit_node_boolean(pmx_stream_t *, pmx_value_t, pmx_boolean_t,
+    pmx_value_t);
+void pmx_emit_node_null(pmx_stream_t *, pmx_value_t, pmx_value_t);
+void pmx_emit_node_hole(pmx_stream_t *, pmx_value_t, pmx_value_t);
+void pmx_emit_node_undefined(pmx_stream_t *, pmx_value_t, pmx_value_t);
+
 void pmx_emit_node_heapnumber(pmx_stream_t *, pmx_value_t, double);
 void pmx_emit_node_external(pmx_stream_t *, pmx_value_t, uintptr_t, size_t);
 void pmx_emit_node_date(pmx_stream_t *, pmx_value_t, struct timespec *);
 void pmx_emit_node_regexp(pmx_stream_t *, pmx_value_t, pmx_value_t,
     pmx_value_t);
-void pmx_emit_node_null(pmx_stream_t *, pmx_value_t);
-void pmx_emit_node_hole(pmx_stream_t *, pmx_value_t);
-void pmx_emit_node_undefined(pmx_stream_t *, pmx_value_t);
-
-void pmx_emit_string_ascii(pmx_stream_t *, pmx_value_t, const char *);
-void pmx_emit_string_cons(pmx_stream_t *, pmx_value_t, pmx_value_t,
+void pmx_emit_node_string_flat(pmx_stream_t *, pmx_value_t, size_t,
     pmx_value_t);
-void pmx_emit_string_slice(pmx_stream_t *, pmx_value_t, pmx_value_t, uintptr_t,
-    uintptr_t);
+void pmx_emit_node_string_cons(pmx_stream_t *, pmx_value_t, size_t,
+    pmx_value_t, pmx_value_t);
+void pmx_emit_node_string_slice(pmx_stream_t *, pmx_value_t, size_t,
+    pmx_value_t, uintptr_t, uintptr_t);
+
+void pmx_emit_string_data(pmx_stream_t *, pmx_value_t, size_t, const uint8_t *);
 
 void pmx_function_start(pmx_stream_t *, pmx_value_t);
 void pmx_function_label(pmx_stream_t *, const char *);
