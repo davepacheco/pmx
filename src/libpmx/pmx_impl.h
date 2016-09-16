@@ -97,7 +97,6 @@ PMX_NORETURN extern void pmx_vpanic(const char *, va_list);
 
 pmx_boolean_t pmx_cstr_printable(const char *);
 
-#define	VERIFY(X) \
-    ((void)((X) || pmx_assfail(#X, __FILE__, __LINE__)))
+#define	VERIFY(X) ((void)((X) || pmx_assfail(#X, __FILE__, __LINE__)))
 
 #endif /* not defined _PMX_IMPL_H */

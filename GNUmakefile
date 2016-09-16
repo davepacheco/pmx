@@ -29,6 +29,7 @@ PMX_CSTYLE_SOURCES	 = $(wildcard \
 				src/pmxemit/*.c)
 CPPFLAGS		+= -Iinclude
 CFLAGS			+= -Werror -Wall -Wextra -fPIC -fno-omit-frame-pointer
+CFLAGS			+= -std=c99 -D_POSIX_C_SOURCE=200112L
 
 ifeq ($(shell uname -s),Darwin)
 	SOFLAGS		+= -Wl,-install_name,$(PMX_SONAME)
@@ -61,6 +62,27 @@ PMX_ALLTARGETS   	 = $(PMX_TARGETS_ia32) \
 			    $(PMX_TARGETS_amd64) \
 			    $(PMX_PMXEMIT)
 
+#
+# libpmx uses a set of routines for emitting JSON.  We keep these in a directory
+# called libjsonemitter and pretend they're a totally separate library for the
+# purpose of hygiene, and potentially spinning it into a truly separate library
+# in the future.  But for now, we build them just like the rest of libpmx and
+# link the resulting objects into libpmx.so.
+#
+JSON_SOURCES		 = jsonemitter.c
+JSON_CSTYLE_SOURCES      = $(wildcard src/libjsonemitter/*.[ch])
+JSON_OBJECTS_ia32	 = $(JSON_SOURCES:%.c=$(PMX_BUILD)/ia32/%.o)
+JSON_OBJECTS_amd64	 = $(JSON_SOURCES:%.c=$(PMX_BUILD)/amd64/%.o)
+
+JSON_JSONEMITEXAMPLE_SOURCES	 = json-emit-example.c
+JSON_JSONEMITEXAMPLE_OBJECTS	 = \
+    $(JSON_JSONEMITEXAMPLE_SOURCES:%.c=$(PMX_BUILD)/ia32/%.o)
+JSON_JSONEMITEXAMPLE	 	 = $(PMX_BUILD)/ia32/json-emit-example
+
+PMX_ALLTARGETS		+= $(JSON_OBJECTS_ia32) $(JSON_OBJECTS_amd64) \
+			   $(JSON_JSONEMITEXAMPLE)
+LDFLAGS			+= -lm
+
 # Phony targets for convenience
 .PHONY: all
 all: $(PMX_ALLTARGETS)
@@ -76,7 +98,7 @@ check: check-cstyle
 
 .PHONY: check-cstyle
 check-cstyle:
-	$(CSTYLE) $(CSTYLE_FLAGS) $(PMX_CSTYLE_SOURCES)
+	$(CSTYLE) $(CSTYLE_FLAGS) $(PMX_CSTYLE_SOURCES) $(JSON_CSTYLE_SOURCES)
 
 .PHONY: prepush
 prepush: check
@@ -86,7 +108,7 @@ prepush: check
 $(PMX_BUILD)/ia32:
 	$(MKDIRP)
 
-$(PMX_BUILD)/ia32/libpmx.so: $(PMX_OBJECTS_ia32)
+$(PMX_BUILD)/ia32/libpmx.so: $(PMX_OBJECTS_ia32) $(JSON_OBJECTS_ia32)
 	$(MAKESO)
 
 $(PMX_BUILD)/ia32/%.o: src/libpmx/%.c | $(PMX_BUILD)/ia32
@@ -95,11 +117,17 @@ $(PMX_BUILD)/ia32/%.o: src/libpmx/%.c | $(PMX_BUILD)/ia32
 $(PMX_BUILD)/ia32/%.o: src/pmxemit/%.c | $(PMX_BUILD)/ia32
 	$(COMPILE.c)
 
+$(PMX_BUILD)/ia32/%.o: src/libjsonemitter/%.c | $(PMX_BUILD)/ia32
+	$(COMPILE.c)
 
-$(PMX_BUILD)/amd64/libpmx.so: $(PMX_OBJECTS_amd64)
+
+$(PMX_BUILD)/amd64/libpmx.so: $(PMX_OBJECTS_amd64) $(JSON_OBJECTS_amd64)
 	$(MAKESO)
 
 $(PMX_BUILD)/amd64/%.o: src/libpmx/%.c | $(PMX_BUILD)/amd64
+	$(COMPILE.c)
+
+$(PMX_BUILD)/amd64/%.o: src/libjsonemitter/%.c | $(PMX_BUILD)/amd64
 	$(COMPILE.c)
 
 $(PMX_BUILD)/amd64:
@@ -107,4 +135,7 @@ $(PMX_BUILD)/amd64:
 
 
 $(PMX_PMXEMIT): $(PMX_PMXEMIT_OBJECTS) | $(PMX_BUILD)/ia32
+	$(MAKEEXEC)
+
+$(JSON_JSONEMITEXAMPLE): $(JSON_OBJECTS_ia32) $(JSON_JSONEMITEXAMPLE_OBJECTS) | $(PMX_BUILD)/ia32
 	$(MAKEEXEC)

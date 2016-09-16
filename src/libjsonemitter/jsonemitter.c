@@ -12,59 +12,74 @@
  * jsonemitter.c: streaming JSON emitter
  */
 
+#include <errno.h>
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "jsonemitter.h"
 
+/*
+ * JSON_MAX_DEPTH is the maximum supported level of nesting of JSON objects.
+ */
 #define	JSON_MAX_DEPTH	255
 
 typedef enum {
-	JSON_NONE,
-	JSON_OBJECT,
-	JSON_ARRAY
+	JSON_NONE,	/* no object is nested at the current depth */
+	JSON_OBJECT,	/* an object is nested at the current depth */
+	JSON_ARRAY	/* an array is nested at the current depth */
 } json_depthdesc_t;
 
+/*
+ * A note on depth management: We allow JSON documents to be nested up to
+ * JSON_MAX_DEPTH.  In order to validate output as we emit it, we maintain a
+ * stack indicating which type of object is nested at each level of depth
+ * (either an array or object).  The stack is recorded in "json_parents", with
+ * the top of the stack at "json_parents[json_depth]".  We keep track of the
+ * number of object properties or array elements at each level of depth in
+ * "json_nemitted[json_depth]".
+ */
 struct json_emit {
 	FILE			*json_stream;		/* output stream */
+
+	/* Error conditions. */
 	int			json_error_stdio;	/* last stdio error */
 	int			json_depth_exceeded;	/* max depth exceeded */
 	unsigned int		json_stdio_nskipped;	/* skip due to error */
 	unsigned int		json_nbadfloats;	/* bad FP values */
 
-	/*
-	 * Depth management: We allow JSON documents to be nested up to
-	 * JSON_MAX_DEPTH.  In order to validate output as we emit it, we
-	 * maintain a stack indicating which type of object is nested at each
-	 * level of depth (either an array or object).  The stack is recorded in
-	 * "json_parents", with the top of the stack at
-	 * "json_parents[json_depth]".  We keep track of the number of object
-	 * properties or array elements at each level of depth in
-	 * "json_nemitted[json_depth]".
-	 */
+	/* Nesting state. */
 	unsigned int		json_depth;
 	json_depthdesc_t	json_parents[JSON_MAX_DEPTH + 1];
 	unsigned int		json_nemitted[JSON_MAX_DEPTH + 1];
-}
+};
+
+/*
+ * General-purpose macros.
+ */
+#define	VERIFY(x) ((void)((x) || json_assert_fail(#x, __FILE__, __LINE__)))
 
 /*
  * Macros used to apply function attributes.
  */
-#define	JSON_PRINTFLIKE1 __attribute__((__format__(__printf__, 1, 2)))
 #define	JSON_PRINTFLIKE2 __attribute__((__format__(__printf__, 2, 3)))
-#define	JSON_PRINTFLIKE3 __attribute__((__format__(__printf__, 3, 4)))
 
-static void json_has_error(json_emit_t *);
+static char json_panicstr[256];
+static int json_assert_fail(const char *, const char *, int);
+
+static int json_has_error(json_emit_t *);
 
 JSON_PRINTFLIKE2 static void json_emit(json_emit_t *, const char *, ...);
-static void json_vemit(json_emit_t, const char *, va_list);
+static void json_vemit(json_emit_t *, const char *, va_list);
 static void json_emit_utf8string(json_emit_t *, const char *);
-static void json_emit_label(json_emit_t *, const char *);
+static void json_emit_prepare(json_emit_t *, const char *);
 
 static json_depthdesc_t json_nest_kind(json_emit_t *);
 static void json_nest_begin(json_emit_t *, json_depthdesc_t);
-static void json_nest_end(json_emit_t *);
+static void json_nest_end(json_emit_t *, json_depthdesc_t);
 
 
 /*
@@ -119,10 +134,21 @@ json_get_error(json_emit_t *jse, char *buf, size_t bufsz)
  * Helper functions
  */
 
+static int
+json_assert_fail(const char *cond, const char *file, int line)
+{
+	int nbytes;
+	nbytes = snprintf(json_panicstr, sizeof (json_panicstr),
+	    "libjsonemitter assertion failed: %s at file %s line %d\n",
+	    cond, file, line);
+	(void) write(STDERR_FILENO, json_panicstr, nbytes);
+	abort();
+}
+
 /*
  * Returns true if we've seen any error up to this point.
  */
-static void
+static int
 json_has_error(json_emit_t *jse)
 {
 	return (jse->json_error_stdio != 0 || jse->json_depth_exceeded != 0);
@@ -158,7 +184,7 @@ static void
 json_emit_utf8string(json_emit_t *jse, const char *utf8str)
 {
 	/* XXX This isn't right. */
-	json_vemit(jse, "\"%s\"", utf8str);
+	json_emit(jse, "\"%s\"", utf8str);
 }
 
 /*
@@ -173,11 +199,16 @@ json_emit_utf8string(json_emit_t *jse, const char *utf8str)
  * already.
  */
 static void
-json_emit_label(json_emit_t *jse, const char *label)
+json_emit_prepare(json_emit_t *jse, const char *label)
 {
 	json_depthdesc_t kind;
 
 	kind = json_nest_kind(jse);
+	if ((kind == JSON_OBJECT || kind == JSON_ARRAY) &&
+	    jse->json_nemitted[jse->json_depth] > 0) {
+		json_emit(jse, ",");
+	}
+
 	if (label == NULL) {
 		VERIFY(kind != JSON_OBJECT);
 		return;
@@ -188,13 +219,20 @@ json_emit_label(json_emit_t *jse, const char *label)
 	json_emit(jse, ":");
 }
 
+static void
+json_emit_finish(json_emit_t *jse)
+{
+	jse->json_nemitted[jse->json_depth]++;
+}
+
 static json_depthdesc_t
 json_nest_kind(json_emit_t *jse)
 {
 	json_depthdesc_t kind;
 	VERIFY(jse->json_depth <= JSON_MAX_DEPTH);
 	kind = jse->json_parents[jse->json_depth];
-	VERIFY(kind > 0 || kind == JSON_OBJECT || kind == JSON_ARRAY);
+	VERIFY(jse->json_depth == 0 ||
+	    kind == JSON_OBJECT || kind == JSON_ARRAY);
 	return (kind);
 }
 
@@ -237,7 +275,7 @@ json_nest_end(json_emit_t *jse, json_depthdesc_t kind)
 void
 json_object_begin(json_emit_t *jse, const char *label)
 {
-	json_emit_label(jse, label);
+	json_emit_prepare(jse, label);
 	json_emit(jse, "{");
 	json_nest_begin(jse, JSON_OBJECT);
 }
@@ -247,21 +285,23 @@ json_object_end(json_emit_t *jse)
 {
 	json_nest_end(jse, JSON_OBJECT);
 	json_emit(jse, "}");
+	json_emit_finish(jse);
 }
 
 void
 json_array_begin(json_emit_t *jse, const char *label)
 {
-	json_emit_label(jse, label);
+	json_emit_prepare(jse, label);
 	json_emit(jse, "[");
 	json_nest_begin(jse, JSON_ARRAY);
 }
 
 void
-json_array_end(json_emit_t *)
+json_array_end(json_emit_t *jse)
 {
 	json_nest_end(jse, JSON_ARRAY);
 	json_emit(jse, "]");
+	json_emit_finish(jse);
 }
 
 void
@@ -280,29 +320,33 @@ void
 json_boolean(json_emit_t *jse, const char *label, json_boolean_t value)
 {
 	VERIFY(value == JSON_B_FALSE || value == JSON_B_TRUE);
-	json_emit_label(jse, label);
+	json_emit_prepare(jse, label);
 	json_emit(jse, "%s", value == JSON_B_TRUE ? "true" : "false");
+	json_emit_finish(jse);
 }
 
 void
 json_null(json_emit_t *jse, const char *label)
 {
-	json_emit_label(jse, label);
+	json_emit_prepare(jse, label);
 	json_emit(jse, "null");
+	json_emit_finish(jse);
 }
 
 void
 json_int64(json_emit_t *jse, const char *label, int64_t value)
 {
-	json_emit_label(jse, label);
-	json_emit(jse, "%lld", value);
+	json_emit_prepare(jse, label);
+	json_emit(jse, "%" PRId64, value);
+	json_emit_finish(jse);
 }
 
 void
 json_uint64(json_emit_t *jse, const char *label, uint64_t value)
 {
-	json_emit_label(jse, label);
-	json_emit(jse, "%llu", value);
+	json_emit_prepare(jse, label);
+	json_emit(jse, "%" PRIu64, value);
+	json_emit_finish(jse);
 }
 
 void
@@ -313,13 +357,15 @@ json_double(json_emit_t *jse, const char *label, double value)
 		return;
 	}
 
-	json_emit_label(jse, label);
-	json_emit(jse, "%e", value);
+	json_emit_prepare(jse, label);
+	json_emit(jse, "%.10e", value);
+	json_emit_finish(jse);
 }
 
 void
-json_utf8string(json_ctx_t *jse, const char *label, const char *value)
+json_utf8string(json_emit_t *jse, const char *label, const char *value)
 {
-	json_emit_label(jse, label);
+	json_emit_prepare(jse, label);
 	json_emit_utf8string(jse, value);
+	json_emit_finish(jse);
 }

@@ -60,17 +60,17 @@ main(int argc __attribute__((__unused__)),
 	/*
 	 * For this test, we make up an address space:
 	 *
-	 *     ADDRESS  CONTENTS
-	 *     0x0100    string "null"
-	 *     0x0200    string "false"
-	 *     0x0300    string "true"
-	 *     0x0400    string "undefined"
-	 *     0x0500    string "the_hole"
-	 *     0x1000    oddball value: null
-	 *     0x2000    oddball value: false
-	 *     0x3000    oddball value: true
-	 *     0x4000    oddball value: undefined
-	 *     0x5000    oddball value: the_hole
+	 *	ADDRESS	CONTENTS
+	 *	0x0100	string "null"
+	 *	0x0200	string "false"
+	 *	0x0300	string "true"
+	 *	0x0400	string "undefined"
+	 *	0x0500	string "the_hole"
+	 *	0x1000	oddball value: null
+	 *	0x2000	oddball value: false
+	 *	0x3000	oddball value: true
+	 *	0x4000	oddball value: undefined
+	 *	0x5000	oddball value: the_hole
 	 */
 	pmx_emit_string_data(pmxp, 0x0100, strlen("null"), (uint8_t *)"null");
 	pmx_emit_string_data(pmxp, 0x0200, strlen("false"), (uint8_t *)"false");

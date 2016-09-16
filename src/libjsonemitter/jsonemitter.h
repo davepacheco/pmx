@@ -11,8 +11,8 @@
 /*
  * jsonemitter.h: interface for emitting streaming JSON
  *
- * The interfaces here enable callers to emit properly formatted JSON (as defined
- * by ECMA-404) in a streaming way.
+ * The interfaces here enable callers to emit properly formatted JSON (as
+ * defined by ECMA-404) in a streaming way.
  *
  * (1) Initialization and cleanup
  *
@@ -40,8 +40,12 @@
  *        json_null()
  *        json_int64()
  *        json_uint64()
- *        json_double()
+ *        json_double()*
  *        json_utf8string()
+ *
+ *     Note that double-precision floating-point values are emitted with ten
+ *     digits in the current implementation, but this is subject to change to
+ *     in the future without sacrificing precision.
  *
  *     You can emit objects and arrays using the functions:
  *
@@ -143,6 +147,6 @@ void json_null(json_emit_t *, const char *);
 void json_int64(json_emit_t *, const char *, int64_t);
 void json_uint64(json_emit_t *, const char *, uint64_t);
 void json_double(json_emit_t *, const char *, double);
-void json_utf8string(json_ctx_t *, const char *, const char *);
+void json_utf8string(json_emit_t *, const char *, const char *);
 
 #endif /* not defined _JSONEMITTER_H_ */
