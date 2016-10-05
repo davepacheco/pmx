@@ -13,6 +13,7 @@
  */
 
 #include <errno.h>
+#include <inttypes.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -123,7 +124,7 @@ json_get_error(json_emit_t *jse, char *buf, size_t bufsz)
 	} else {
 		kind = JSE_NONE;
 		if (bufsz > 0) {
-			buf[bufsz] = '\0';
+			buf[0] = '\0';
 		}
 	}
 

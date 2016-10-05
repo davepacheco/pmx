@@ -114,6 +114,7 @@
 #ifndef	_JSONEMITTER_H
 #define	_JSONEMITTER_H
 
+#include <stdint.h>
 #include <stdio.h>
 
 typedef struct json_emit json_emit_t;
