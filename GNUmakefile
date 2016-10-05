@@ -61,6 +61,8 @@ $(PMX_PMXEMIT):		 LDFLAGS += -m32 -L$(PMX_BUILD)/ia32 -lpmx
 PMX_ALLTARGETS   	 = $(PMX_TARGETS_ia32) \
 			    $(PMX_TARGETS_amd64) \
 			    $(PMX_PMXEMIT)
+$(PMX_ALLTARGETS):	 CPPFLAGS += -Isrc
+
 
 #
 # libpmx uses a set of routines for emitting JSON.  We keep these in a directory

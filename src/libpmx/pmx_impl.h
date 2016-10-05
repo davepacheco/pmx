@@ -18,6 +18,7 @@
 #include <stdarg.h>
 
 #include <pmx/pmx.h>
+#include <libjsonemitter/jsonemitter.h>
 
 /* Maximum length of internal error messages. */
 #define	PMX_ERRMSGLEN 256
@@ -37,7 +38,16 @@ typedef enum {
  * XXX Not yet, but they should be.
  */
 typedef enum {
-	PMXN_ODDBALL = 1
+	PMXN_NONE		= 0,
+	PMXN_ODDBALL		= 1,
+	PMXN_HEAPNUMBER		= 2,
+	PMXN_DATE		= 3,
+	PMXN_STRING_FLAT	= 4,
+	PMXN_STRING_CONS	= 5,
+	PMXN_OBJECT		= 6,
+	PMXN_ARRAY		= 7,
+	PMXN_FUNCINFO		= 8,
+	PMXN_CLOSURE		= 9,
 } pmx_nodetype_t;
 
 /*
@@ -48,10 +58,12 @@ typedef enum {
 struct pmx_stream {
 	/* state of the export */
 	pmx_state_t	pxs_state;
+	pmx_nodetype_t	pxs_subtype;
 
 	/* output and error streams */
 	FILE		*pxs_outstream;
 	FILE		*pxs_errstream;
+	json_emit_t	*pxs_jsonout;
 
 	/* most recent error code and message */
 	pmx_error_t	pxs_error;

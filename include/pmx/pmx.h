@@ -46,8 +46,8 @@ const char *pmx_errmsg(pmx_stream_t *);
 void pmx_emit_metadata(pmx_stream_t *, const char *, const char *);
 void pmx_emit_node_boolean(pmx_stream_t *, pmx_value_t, pmx_boolean_t,
     pmx_value_t);
-void pmx_emit_node_null(pmx_stream_t *, pmx_value_t, pmx_value_t);
 void pmx_emit_node_hole(pmx_stream_t *, pmx_value_t, pmx_value_t);
+void pmx_emit_node_null(pmx_stream_t *, pmx_value_t, pmx_value_t);
 void pmx_emit_node_undefined(pmx_stream_t *, pmx_value_t, pmx_value_t);
 
 void pmx_emit_node_heapnumber(pmx_stream_t *, pmx_value_t, double);
@@ -55,19 +55,19 @@ void pmx_emit_node_external(pmx_stream_t *, pmx_value_t, uintptr_t, size_t);
 void pmx_emit_node_date(pmx_stream_t *, pmx_value_t, struct timespec *);
 void pmx_emit_node_regexp(pmx_stream_t *, pmx_value_t, pmx_value_t,
     pmx_value_t);
-void pmx_emit_node_string_flat(pmx_stream_t *, pmx_value_t, size_t,
+void pmx_emit_node_string_flat(pmx_stream_t *, pmx_value_t, pmx_value_t,
     pmx_value_t);
-void pmx_emit_node_string_cons(pmx_stream_t *, pmx_value_t, size_t,
+void pmx_emit_node_string_cons(pmx_stream_t *, pmx_value_t, pmx_value_t,
     pmx_value_t, pmx_value_t);
-void pmx_emit_node_string_slice(pmx_stream_t *, pmx_value_t, size_t,
+void pmx_emit_node_string_slice(pmx_stream_t *, pmx_value_t, pmx_value_t,
     pmx_value_t, uintptr_t, uintptr_t);
 
 void pmx_emit_string_data(pmx_stream_t *, pmx_value_t, size_t, const uint8_t *);
 
 void pmx_function_start(pmx_stream_t *, pmx_value_t);
-void pmx_function_label(pmx_stream_t *, const char *);
-void pmx_function_script_name(pmx_stream_t *, const char *);
-void pmx_function_position(pmx_stream_t *, const char *);
+void pmx_function_label(pmx_stream_t *, pmx_value_t);
+void pmx_function_script_name(pmx_stream_t *, pmx_value_t);
+void pmx_function_position(pmx_stream_t *, pmx_value_t);
 void pmx_function_done(pmx_stream_t *);
 
 void pmx_closure_start(pmx_stream_t *, pmx_value_t, pmx_value_t);
@@ -76,12 +76,15 @@ void pmx_closure_variable(pmx_stream_t *, pmx_value_t, const char *);
 void pmx_closure_done(pmx_stream_t *);
 
 void pmx_object_start(pmx_stream_t *, pmx_value_t);
-void pmx_object_constructor(pmx_stream_t *, pmx_value_t, pmx_value_t);
-void pmx_object_property(pmx_stream_t *, pmx_value_t, const char *);
+void pmx_object_constructor(pmx_stream_t *, pmx_value_t);
 void pmx_object_done(pmx_stream_t *);
+void pmx_object_property(pmx_stream_t *, pmx_value_t, pmx_value_t,
+    const char *);
 
-void pmx_array_start(pmx_stream_t *, pmx_value_t);
-void pmx_array_element(pmx_stream_t *, pmx_value_t, int, size_t);
-void pmx_array_done(pmx_stream_t *);
+void pmx_array(pmx_stream_t *, pmx_value_t, size_t);
+void pmx_array_element(pmx_stream_t *, pmx_value_t, pmx_value_t, int, size_t);
+
+/* XXX */
+#define	PMX_SMI_VALUE(x)	((x) << 1)
 
 #endif /* not defined _PMX_H_ */

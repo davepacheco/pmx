@@ -20,7 +20,11 @@
 #include <unistd.h>
 
 #include <pmx/pmx.h>
+#include <libjsonemitter/jsonemitter.h>
 #include "pmx_impl.h"
+
+#define	MILLISEC	1000
+#define	MICROSEC	1000000
 
 /*
  * Statically-allocated buffer for fatal error messages.
@@ -50,7 +54,12 @@ pmx_create_stream(FILE *outfp, FILE *errfp)
 	}
 
 	pmxp->pxs_outstream = outfp;
-	pmxp->pxs_outstream = errfp;
+	pmxp->pxs_errstream = errfp;
+	pmxp->pxs_jsonout = json_create_stdio(outfp);
+	if (pmxp->pxs_jsonout == NULL) {
+		pmx_free(pmxp);
+		return (NULL);
+	}
 
 	/*
 	 * XXX This is where we should emit the nodetypes and edgetypes that we
@@ -63,7 +72,10 @@ pmx_create_stream(FILE *outfp, FILE *errfp)
 void
 pmx_free(pmx_stream_t *pmxp)
 {
-	free(pmxp);
+	if (pmxp != NULL) {
+		json_fini(pmxp->pxs_jsonout);
+		free(pmxp);
+	}
 }
 
 
@@ -200,21 +212,24 @@ pmx_node_begin(pmx_stream_t *pmxp, pmx_value_t ident, pmx_nodetype_t subtype)
 {
 	VERIFY(pmxp->pxs_state == PMXS_TOP);
 	VERIFY(pmxp->pxs_nfields == 0);
+	VERIFY(subtype != PMXN_NONE);
 	pmxp->pxs_state = PMXS_NODE;
+	pmxp->pxs_subtype = subtype;
 
-	/* XXX Does JSON support 64-bit numeric values? */
-	/* XXX record errors from fprintf? Or just check stream status later? */
-	(void) fprintf(pmxp->pxs_outstream,
-	    "{\"type\":\"node\",\"ident\":0x%" PRIx64 ",\"subtype\":%u",
-	    (uint64_t)ident, subtype);
+	json_object_begin(pmxp->pxs_jsonout, NULL);
+	json_utf8string(pmxp->pxs_jsonout, "type", "node");
+	json_uint64(pmxp->pxs_jsonout, "subtype", subtype);
+	json_uint64(pmxp->pxs_jsonout, "ident", ident);
 }
 
 static void
 pmx_node_end(pmx_stream_t *pmxp)
 {
 	VERIFY(pmxp->pxs_state == PMXS_NODE);
-	(void) fprintf(pmxp->pxs_outstream, "}\n");
+	json_object_end(pmxp->pxs_jsonout);
+	json_newline(pmxp->pxs_jsonout);
 	pmxp->pxs_state = PMXS_TOP;
+	pmxp->pxs_subtype = PMXN_NONE;
 	pmxp->pxs_nfields = 0;
 }
 
@@ -224,8 +239,7 @@ pmx_node_field_jsv(pmx_stream_t *pmxp, const char *label, pmx_value_t val)
 	VERIFY(pmxp->pxs_state == PMXS_NODE);
 	VERIFY(strchr(label, '"') == NULL);
 	pmxp->pxs_nfields++;
-	(void) fprintf(pmxp->pxs_outstream, ",\"%s\":0x%" PRIx64, label,
-	    (uint64_t)val);
+	json_uint64(pmxp->pxs_jsonout, label, val);
 }
 
 static void
@@ -258,10 +272,26 @@ pmx_emit_metadata(pmx_stream_t *pmxp, const char *key, const char *value)
 	VERIFY(pmx_cstr_printable(value));
 	VERIFY(strchr(value, '"') == NULL);
 
-	(void) fprintf(pmxp->pxs_outstream,
-	    "{\"type\":\"metadata\",\"key\":\"%s\",\"value\":\"%s\"}\n",
-	    key, value);
+	json_object_begin(pmxp->pxs_jsonout, NULL);
+	json_utf8string(pmxp->pxs_jsonout, "type", "metadata");
+	json_utf8string(pmxp->pxs_jsonout, "key", key);
+	json_utf8string(pmxp->pxs_jsonout, "value", value);
+	json_object_end(pmxp->pxs_jsonout);
+	json_newline(pmxp->pxs_jsonout);
 	pmxp->pxs_nmetadata++;
+}
+
+void
+pmx_emit_node_boolean(pmx_stream_t *pmxp, pmx_value_t jsv, pmx_boolean_t val,
+    pmx_value_t label)
+{
+	if (val) {
+		pmx_emit_oddball(pmxp, jsv, &pmxp->pxs_emitted_true,
+		    "true", label);
+	} else {
+		pmx_emit_oddball(pmxp, jsv, &pmxp->pxs_emitted_false,
+		    "false", label);
+	}
 }
 
 void
@@ -284,16 +314,132 @@ pmx_emit_node_undefined(pmx_stream_t *pmxp, pmx_value_t jsv, pmx_value_t label)
 }
 
 void
-pmx_emit_node_boolean(pmx_stream_t *pmxp, pmx_value_t jsv, pmx_boolean_t val,
-    pmx_value_t label)
+pmx_emit_node_heapnumber(pmx_stream_t *pmxp, pmx_value_t jsv, double d)
 {
-	if (val) {
-		pmx_emit_oddball(pmxp, jsv, &pmxp->pxs_emitted_true,
-		    "true", label);
-	} else {
-		pmx_emit_oddball(pmxp, jsv, &pmxp->pxs_emitted_false,
-		    "false", label);
-	}
+	json_emit_t *jse = pmxp->pxs_jsonout;
+
+	pmx_node_begin(pmxp, jsv, PMXN_HEAPNUMBER);
+	json_double(jse, "value", d);
+	pmx_node_end(pmxp);
+}
+
+void
+pmx_emit_node_date(pmx_stream_t *pmxp, pmx_value_t jsv, struct timespec *ts)
+{
+	uint64_t millis;
+
+	millis = (uint64_t)ts->tv_sec * MILLISEC +
+	    (uint64_t)ts->tv_nsec / MICROSEC;
+	pmx_node_begin(pmxp, jsv, PMXN_DATE);
+	json_uint64(pmxp->pxs_jsonout, "timestamp", millis);
+	pmx_node_end(pmxp);
+}
+
+void
+pmx_emit_node_string_flat(pmx_stream_t *pmxp, pmx_value_t jsv, pmx_value_t len,
+    pmx_value_t bytes)
+{
+	pmx_node_begin(pmxp, jsv, PMXN_STRING_FLAT);
+	json_uint64(pmxp->pxs_jsonout, "length", len);
+	json_uint64(pmxp->pxs_jsonout, "data", bytes);
+	pmx_node_end(pmxp);
+}
+
+void
+pmx_emit_node_string_cons(pmx_stream_t *pmxp, pmx_value_t jsv, pmx_value_t len,
+    pmx_value_t s1, pmx_value_t s2)
+{
+	pmx_node_begin(pmxp, jsv, PMXN_STRING_CONS);
+	json_uint64(pmxp->pxs_jsonout, "length", len);
+	json_uint64(pmxp->pxs_jsonout, "s1", s1);
+	json_uint64(pmxp->pxs_jsonout, "s1", s2);
+	pmx_node_end(pmxp);
+}
+
+void
+pmx_function_start(pmx_stream_t *pmxp, pmx_value_t jsv)
+{
+	pmx_node_begin(pmxp, jsv, PMXN_FUNCINFO);
+}
+
+void
+pmx_function_label(pmx_stream_t *pmxp, pmx_value_t jsv)
+{
+	VERIFY(pmxp->pxs_subtype == PMXN_FUNCINFO);
+	json_uint64(pmxp->pxs_jsonout, "name", jsv);
+}
+
+void
+pmx_function_script_name(pmx_stream_t *pmxp, pmx_value_t jsv)
+{
+	VERIFY(pmxp->pxs_subtype == PMXN_FUNCINFO);
+	json_uint64(pmxp->pxs_jsonout, "script_name", jsv);
+}
+
+void
+pmx_function_position(pmx_stream_t *pmxp, pmx_value_t jsv)
+{
+	VERIFY(pmxp->pxs_subtype == PMXN_FUNCINFO);
+	json_uint64(pmxp->pxs_jsonout, "position", jsv);
+}
+
+void
+pmx_function_done(pmx_stream_t *pmxp)
+{
+	VERIFY(pmxp->pxs_subtype == PMXN_FUNCINFO);
+	pmx_node_end(pmxp);
+}
+
+
+void
+pmx_closure_start(pmx_stream_t *pmxp, pmx_value_t jsv, pmx_value_t funcinfo)
+{
+	pmx_node_begin(pmxp, jsv, PMXN_CLOSURE);
+	json_uint64(pmxp->pxs_jsonout, "metadata", funcinfo);
+}
+
+void
+pmx_closure_parent(pmx_stream_t *pmxp, pmx_value_t parent)
+{
+	VERIFY(pmxp->pxs_subtype == PMXN_CLOSURE);
+	json_uint64(pmxp->pxs_jsonout, "parent", parent);
+}
+
+void
+pmx_closure_done(pmx_stream_t *pmxp)
+{
+	VERIFY(pmxp->pxs_subtype == PMXN_CLOSURE);
+	pmx_node_end(pmxp);
+}
+
+
+void
+pmx_object_start(pmx_stream_t *pmxp, pmx_value_t jsv)
+{
+	pmx_node_begin(pmxp, jsv, PMXN_OBJECT);
+}
+
+void
+pmx_object_constructor(pmx_stream_t *pmxp, pmx_value_t cons)
+{
+	VERIFY(pmxp->pxs_subtype == PMXN_OBJECT);
+	json_uint64(pmxp->pxs_jsonout, "constructor", cons);
+}
+
+void
+pmx_object_done(pmx_stream_t *pmxp)
+{
+	VERIFY(pmxp->pxs_subtype == PMXN_OBJECT);
+	pmx_node_end(pmxp);
+}
+
+/* XXX should length here be a value (so it can be a heap number?) */
+void
+pmx_array(pmx_stream_t *pmxp, pmx_value_t jsv, size_t len)
+{
+	pmx_node_begin(pmxp, jsv, PMXN_ARRAY);
+	json_uint64(pmxp->pxs_jsonout, "length", len);
+	pmx_node_end(pmxp);
 }
 
 void
@@ -333,7 +479,7 @@ pmx_emit_string_data(pmx_stream_t *pmxp, pmx_value_t jsv, size_t sz,
 	 * XXX This needs to be better-specified in the spec.
 	 */
 	(void) fprintf(pmxp->pxs_outstream,
-	    "{\"type\":\"string\",\"ident\":0x%" PRIx64 ",\"contents\":\"",
+	    "{\"type\":\"string\",\"ident\":%" PRIu64 ",\"contents\":\"",
 	    (uint64_t)jsv);
 	for (i = 0; i < sz; i++) {
 		if (!isascii(bytes[i])) {
