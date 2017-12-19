@@ -142,6 +142,9 @@ jsx_example_coverage(json_emit_t *jse)
 	json_boolean(jse, "boolean: false", JSON_B_FALSE);
 	json_utf8string(jse, "string: empty", "");
 	json_utf8string(jse, "string: non-empty", "bump!");
+	/* XXX add utf8 literals */
+	json_utf8string(jse, "string: special values",
+	    "newline\ntab\treturn\rspace quote\"squote'backslash\\");
 
 	json_object_end(jse);
 	json_newline(jse);
